@@ -6,7 +6,7 @@ set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_STANDARD 17)
 
 # set debug flags
-set(CMAKE_CXX_FLAGS_DEBUG "-ggdb3 -O0 -Wall -Wextra -Wpedantic")
+set(CMAKE_CXX_FLAGS_DEBUG "-ggdb3 -O0 -Wall -Wextra -Wpedantic -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls")
 
 find_program(LLD lld)
 # If lld is found, set the linker flags
@@ -31,5 +31,6 @@ target_precompile_headers(buse_nfs PRIVATE src/pch.h)
 
 add_subdirectory(src/loguru)
 add_subdirectory(src/cxxopts)
+add_subdirectory(src/buse)
 
-target_link_libraries(buse_nfs PRIVATE loguru::loguru cxxopts::cxxopts)
+target_link_libraries(buse_nfs PRIVATE loguru::loguru cxxopts::cxxopts buse)

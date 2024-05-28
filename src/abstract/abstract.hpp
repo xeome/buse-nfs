@@ -1,0 +1,3 @@
+class abstractfs {
+   public:
+}
