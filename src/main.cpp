@@ -1,12 +1,16 @@
 #include <queue>
 #include <thread>
 #include <atomic>
+#include <condition_variable>
+#include <mutex>
 #include "pch.h"  // Include the precompiled header
 
 /* BUSE callbacks */
 static void* data;
 static void* remote_data;
 static std::atomic<bool> stop_sync_thread{false};
+static std::mutex sync_mutex;
+static std::condition_variable sync_cv;
 
 // Write operation to be sent to the remote data
 struct write_op {
@@ -115,11 +119,18 @@ static int xmp_trim(u_int64_t from, u_int32_t len, void* verbose) {
 }
 
 void sync_data_periodically(int verbose) {
-    while (!stop_sync_thread) {
-        std::this_thread::sleep_for(std::chrono::seconds(5));
-        if (!write_ops.empty()) {
-            xmp_sync((void*)&verbose);
+    std::unique_lock<std::mutex> lock(sync_mutex);
+    while (!stop_sync_thread.load()) {
+        if (sync_cv.wait_for(lock, std::chrono::seconds(5)) == std::cv_status::timeout) {
+            if (!write_ops.empty()) {
+                xmp_sync((void*)&verbose);
+            }
         }
+    }
+    // Perform final sync before exit
+    if (!write_ops.empty()) {
+        LOG_F(INFO, "Performing final sync before exit");
+        xmp_sync((void*)&verbose);
     }
 }
 
@@ -174,12 +185,18 @@ int main(int argc, char* argv[]) {
     if (buse_main(result["dev"].as<std::string>().c_str(), &aop, (void*)&result["verbose"].as<int>()) != 0) {
         LOG_F(ERROR, "Failed to create block device");
         stop_sync_thread = true;
-        sync_thread.join();  // Wait for sync thread to finish
+        sync_cv.notify_all();  // Notify the sync thread to stop
+        sync_thread.join();    // Wait for sync thread to finish
+        free(data);
+        free(remote_data);
         return 1;
     }
 
-    stop_sync_thread = true;
-    sync_thread.join();  // Wait for sync thread to finish
+    stop_sync_thread.store(true);
+    sync_cv.notify_all();  // Notify the sync thread to stop
+    sync_thread.join();    // Wait for sync thread to finish
+
+    LOG_F(INFO, "Exiting buse_nfs");
 
     free(data);
     free(remote_data);
