@@ -6,6 +6,7 @@
 #include "loguru.hpp"
 #include "cxxopts.hpp"
 #include "buse.h"
+#include "busemanager.hpp"
 
 static int init_options(const int argc, char** argv, cxxopts::Options& options, cxxopts::ParseResult& result) {
     result = options.parse(argc, argv);
