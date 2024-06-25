@@ -3,8 +3,7 @@
 #include <cstring>
 #include <loguru.hpp>
 
-BuseManager::BuseManager(int bufferSize, int blockSize)
-    : shouldStopSyncThread(false), BLOCK_SIZE(blockSize), BUFFER_SIZE(bufferSize) {
+BuseManager::BuseManager(int bufferSize) : shouldStopSyncThread(false), BUFFER_SIZE(bufferSize) {
     buffer = malloc(bufferSize);
     remoteBuffer = malloc(bufferSize);
 }
@@ -56,9 +55,11 @@ void BuseManager::consolidateWriteOperations() {
 
         for (size_t i = 1; i < writeOps.size(); ++i) {
             WriteOp nextOp = writeOps[i];
+
             // Check if current and next operations can be merged
-            const bool shouldMerge = currentOp.offset + currentOp.len >= nextOp.offset ||
-                                     (nextOp.offset - (currentOp.offset + currentOp.len) <= OFFSET_DELTA_THRESHOLD);
+            const bool overlap = currentOp.offset + currentOp.len >= nextOp.offset;
+            const bool closeEnough = nextOp.offset - (currentOp.offset + currentOp.len) <= OFFSET_DELTA_THRESHOLD;
+            const bool shouldMerge = overlap || closeEnough;
 
             if (shouldMerge) {
                 // Merge operations

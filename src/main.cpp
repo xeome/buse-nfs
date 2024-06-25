@@ -73,8 +73,7 @@ int main(int argc, char* argv[]) {
 
     loguru::init(argc, argv);
     LOG_F(INFO, "Starting buse_nfs");
-    LOG_F(INFO, "Creating block device at %s with size %d bytes", result["dev"].as<std::string>().c_str(),
-          result["size"].as<int>());
+    LOG_F(INFO, "Creating block device at %s with size %d bytes", result["dev"].as<std::string>().c_str(), result["size"].as<int>());
 
     BuseManager::buffer = malloc(result["size"].as<int>());
     BuseManager::remoteBuffer = malloc(result["size"].as<int>());
@@ -116,7 +115,6 @@ int main(int argc, char* argv[]) {
     }
 
     LOG_F(INFO, "Exiting buse_nfs");
-    // Free the buffer
     free(BuseManager::buffer);
     free(BuseManager::remoteBuffer);
 

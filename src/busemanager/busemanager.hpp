@@ -15,7 +15,7 @@ struct WriteOp {
 
 class BuseManager {
    public:
-    BuseManager(int bufferSize = 1048576, int blockSize = 4096);
+    BuseManager(int bufferSize = 1048576);
     void runPeriodicSync();
     void addWriteOp(uint64_t offset, uint32_t len);
     void stopSyncThread();
@@ -28,7 +28,6 @@ class BuseManager {
     std::atomic<bool> shouldStopSyncThread;
     std::mutex lockMutex;
     std::condition_variable syncCondVar;
-    const uint64_t BLOCK_SIZE;
     const uint64_t SYNC_INTERVAL = 5;
     const uint64_t BUFFER_SIZE;
 
