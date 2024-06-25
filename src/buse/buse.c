@@ -294,6 +294,7 @@ int buse_main(const char* dev_file, const struct buse_operations* aop, void* use
             exit(EXIT_FAILURE);
         }
 
+        printf("Child process exiting\n");
         exit(0);
     }
 
@@ -313,6 +314,8 @@ int buse_main(const char* dev_file, const struct buse_operations* aop, void* use
     }
 
     close(sp[1]);
+
+    aop->init(userdata);
 
     /* serve NBD socket */
     int status;

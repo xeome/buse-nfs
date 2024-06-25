@@ -1,3 +1,5 @@
+#include <unistd.h>
+#include <mutex>
 #include <thread>
 #include <cstring>  // For memcpy and memcmp
 #include "pch.h"    // Include the precompiled header
@@ -6,6 +8,8 @@ BuseManager buseManager;
 
 void* BuseManager::buffer = nullptr;
 void* BuseManager::remoteBuffer = nullptr;
+
+std::thread syncThread;
 
 // Static buse functions that interact with BuseManager
 static int xmp_read(void* buf, uint32_t len, uint64_t offset, void* verbose) {
@@ -26,6 +30,7 @@ static int xmp_write(const void* buf, uint32_t len, uint64_t offset, void* verbo
 static void xmp_disc(void* verbose) {
     if (*(int*)verbose)
         LOG_F(INFO, "Disconnect request received");
+    buseManager.stopSyncThread();
 }
 
 static int xmp_flush(void* verbose) {
@@ -37,6 +42,15 @@ static int xmp_flush(void* verbose) {
 static int xmp_trim(uint64_t offset, uint32_t len, void* verbose) {
     if (*(int*)verbose)
         LOG_F(INFO, "Trim - %lu, %u", offset, len);
+    return 0;
+}
+
+static int xmp_init(void* verbose) {
+    if (*(int*)verbose)
+        LOG_F(INFO, "Init");
+
+    syncThread = std::thread(&BuseManager::runPeriodicSync, &buseManager);
+
     return 0;
 }
 
@@ -60,7 +74,8 @@ int main(int argc, char* argv[]) {
 
     loguru::init(argc, argv);
     LOG_F(INFO, "Starting buse_nfs");
-    LOG_F(INFO, "Creating block device at %s with size %d bytes", result["dev"].as<std::string>().c_str(), result["size"].as<int>());
+    LOG_F(INFO, "Creating block device at %s with size %d bytes", result["dev"].as<std::string>().c_str(),
+          result["size"].as<int>());
 
     BuseManager::buffer = malloc(result["size"].as<int>());
     BuseManager::remoteBuffer = malloc(result["size"].as<int>());
@@ -70,9 +85,6 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    // Start a thread to perform periodic sync
-    std::thread syncThread(&BuseManager::runPeriodicSync, &buseManager, result["verbose"].as<int>());
-
     // Start buse
     struct buse_operations aop = {
         xmp_read,                                          // read
@@ -80,31 +92,31 @@ int main(int argc, char* argv[]) {
         xmp_disc,                                          // disc
         xmp_flush,                                         // flush
         xmp_trim,                                          // trim
+        xmp_init,                                          // init
         static_cast<u_int64_t>(result["size"].as<int>()),  // size
         512,                                               // blksize
         0                                                  // size_blocks
     };
 
-    if (buse_main(result["dev"].as<std::string>().c_str(), &aop, (void*)&result["verbose"].as<int>()) != 0) {
-        LOG_F(ERROR, "Failed to create block device");
+    std::thread buseThread([&]() {
+        if (buse_main(result["dev"].as<std::string>().c_str(), &aop, (void*)&result["verbose"].as<int>()) != 0) {
+            LOG_F(ERROR, "Failed to create block device");
 
-        // Stop the sync thread
-        buseManager.stopSyncThread();
+            // Stop the sync thread
+            buseManager.stopSyncThread();
+        }
+        LOG_F(INFO, "Exiting buse thread");
+    });
+
+    if (buseThread.joinable()) {
+        buseThread.join();
+    }
+
+    if (syncThread.joinable()) {
         syncThread.join();
-
-        // Free the buffer
-        free(BuseManager::buffer);
-        free(BuseManager::remoteBuffer);
-
-        return 1;
     }
 
     LOG_F(INFO, "Exiting buse_nfs");
-
-    // Stop the sync thread
-    buseManager.stopSyncThread();
-    syncThread.join();
-
     // Free the buffer
     free(BuseManager::buffer);
     free(BuseManager::remoteBuffer);

@@ -16,7 +16,7 @@ struct WriteOp {
 class BuseManager {
    public:
     BuseManager(int bufferSize = 1048576, int blockSize = 4096);
-    void runPeriodicSync(int verbose);
+    void runPeriodicSync();
     void addWriteOp(uint64_t offset, uint32_t len);
     void stopSyncThread();
 
@@ -33,7 +33,7 @@ class BuseManager {
     const uint64_t BUFFER_SIZE;
 
     void consolidateWriteOperations();
-    void synchronizeData(int verbose);
+    void synchronizeData();
 };
 
 #endif  // BUSE_MANAGER_H

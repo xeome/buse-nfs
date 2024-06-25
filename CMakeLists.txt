@@ -6,7 +6,7 @@ set(CMAKE_BUILD_TYPE Debug)
 set(CMAKE_CXX_STANDARD 17)
 
 # set debug flags
-set(CMAKE_CXX_FLAGS_DEBUG "-ggdb3 -O0 -Wall -Wextra -Wpedantic -fsanitize=address -fsanitize=undefined -fno-omit-frame-pointer -fno-optimize-sibling-calls")
+set(CMAKE_CXX_FLAGS_DEBUG "-ggdb3 -O0 -Wall -Wextra -Wpedantic -fno-omit-frame-pointer -fno-optimize-sibling-calls")
 
 find_program(LLD lld)
 # If lld is found, set the linker flags

@@ -3,24 +3,25 @@
 #include <cstring>
 #include <loguru.hpp>
 
-BuseManager::BuseManager(int bufferSize, int blockSize) : shouldStopSyncThread(false), BLOCK_SIZE(blockSize), BUFFER_SIZE(bufferSize) {
+BuseManager::BuseManager(int bufferSize, int blockSize)
+    : shouldStopSyncThread(false), BLOCK_SIZE(blockSize), BUFFER_SIZE(bufferSize) {
     buffer = malloc(bufferSize);
     remoteBuffer = malloc(bufferSize);
 }
 
-void BuseManager::runPeriodicSync(int verbose) {
+void BuseManager::runPeriodicSync() {
     std::unique_lock<std::mutex> lock(lockMutex);
     while (!shouldStopSyncThread.load()) {
         if (syncCondVar.wait_for(lock, std::chrono::seconds(SYNC_INTERVAL)) == std::cv_status::timeout) {
             if (!writeOps.empty()) {
-                synchronizeData(verbose);
+                synchronizeData();
             }
         }
     }
     // Perform final sync before exit
     if (!writeOps.empty()) {
         LOG_F(INFO, "Performing final sync before exit");
-        synchronizeData(verbose);
+        synchronizeData();
     }
     LOG_F(INFO, "Exiting sync thread");
 }
@@ -50,7 +51,8 @@ void BuseManager::consolidateWriteOperations() {
     for (size_t i = 1; i < writeOps.size(); ++i) {
         WriteOp nextOp = writeOps[i];
         // Check if current and next operations can be merged
-        const bool shouldMerge = currentOp.offset + currentOp.len >= nextOp.offset || nextOp.offset - currentOp.offset < BLOCK_SIZE;
+        const bool shouldMerge =
+            currentOp.offset + currentOp.len >= nextOp.offset || nextOp.offset - currentOp.offset < BLOCK_SIZE;
 
         if (shouldMerge) {
             // Merge operations
@@ -70,15 +72,13 @@ void BuseManager::consolidateWriteOperations() {
     writeOps = std::move(mergedOps);
 }
 
-void BuseManager::synchronizeData(int verbose) {
-    if (verbose)
-        LOG_F(INFO, "Received a sync request.");
+void BuseManager::synchronizeData() {
+    LOG_F(INFO, "Received a sync request.");
 
     consolidateWriteOperations();
     for (const auto& op : writeOps) {
         memcpy(static_cast<char*>(remoteBuffer) + op.offset, static_cast<char*>(buffer) + op.offset, op.len);
-        if (verbose)
-            LOG_F(INFO, "Synced %lu, %u", op.offset, op.len);
+        LOG_F(INFO, "Synced %lu, %u", op.offset, op.len);
     }
     writeOps.clear();
 

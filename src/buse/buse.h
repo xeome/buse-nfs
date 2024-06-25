@@ -13,6 +13,7 @@ struct buse_operations {
     void (*disc)(void* userdata);
     int (*flush)(void* userdata);
     int (*trim)(u_int64_t from, u_int32_t len, void* userdata);
+    int (*init)(void* userdata);
 
     // either set size, OR set both blksize and size_blocks
     u_int64_t size;
