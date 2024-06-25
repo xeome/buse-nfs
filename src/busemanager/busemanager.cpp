@@ -40,38 +40,48 @@ void BuseManager::consolidateWriteOperations() {
     if (writeOps.empty())
         return;
 
-    // Sort writeOps based on offset
-    std::sort(writeOps.begin(), writeOps.end(), [](const WriteOp& a, const WriteOp& b) { return a.offset < b.offset; });
-
+    constexpr uint64_t OFFSET_DELTA_THRESHOLD = 4096;
+    constexpr uint64_t MAX_MERGE_ITERATIONS = 5;
     LOG_F(INFO, "Before merge: %lu", writeOps.size());
 
-    std::vector<WriteOp> mergedOps;
-    WriteOp currentOp = writeOps[0];
+    int mergedCount = MAX_MERGE_ITERATIONS;
+    bool merged = false;
+    do {
+        // Sort writeOps based on offset
+        std::sort(writeOps.begin(), writeOps.end(), [](const WriteOp& a, const WriteOp& b) { return a.offset < b.offset; });
 
-    for (size_t i = 1; i < writeOps.size(); ++i) {
-        WriteOp nextOp = writeOps[i];
-        // Check if current and next operations can be merged
-        const bool shouldMerge =
-            currentOp.offset + currentOp.len >= nextOp.offset || nextOp.offset - currentOp.offset < BLOCK_SIZE;
+        std::vector<WriteOp> mergedOps;
+        WriteOp currentOp = writeOps[0];
+        merged = false;  // Reset merged flag for this iteration
 
-        if (shouldMerge) {
-            // Merge operations
-            uint64_t newEnd = std::max(currentOp.offset + currentOp.len, nextOp.offset + nextOp.len);
-            currentOp.len = newEnd - currentOp.offset;
-        } else {
-            // No merge possible, push currentOp to mergedOps and move to next
-            mergedOps.push_back(currentOp);
-            currentOp = nextOp;
+        for (size_t i = 1; i < writeOps.size(); ++i) {
+            WriteOp nextOp = writeOps[i];
+            // Check if current and next operations can be merged
+            const bool shouldMerge = currentOp.offset + currentOp.len >= nextOp.offset ||
+                                     (nextOp.offset - (currentOp.offset + currentOp.len) <= OFFSET_DELTA_THRESHOLD);
+
+            if (shouldMerge) {
+                // Merge operations
+                uint64_t newEnd = std::max(currentOp.offset + currentOp.len, nextOp.offset + nextOp.len);
+                currentOp.len = newEnd - currentOp.offset;
+                merged = true;
+            } else {
+                // No merge possible, push currentOp to mergedOps and move to next
+                mergedOps.push_back(currentOp);
+                currentOp = nextOp;
+            }
         }
-    }
-    // Push the last operation
-    mergedOps.push_back(currentOp);
+        // Push the last operation
+        mergedOps.push_back(currentOp);
+        if (merged) {
+            mergedCount--;
+        }
 
-    LOG_F(INFO, "After merge: %lu", mergedOps.size());
+        writeOps = std::move(mergedOps);
+    } while (mergedCount > 0 && merged);  // Continue if at least one merge was made
 
-    writeOps = std::move(mergedOps);
+    LOG_F(INFO, "After consolidation: %lu, %lu iterations", writeOps.size(), MAX_MERGE_ITERATIONS - mergedCount);
 }
-
 void BuseManager::synchronizeData() {
     LOG_F(INFO, "Received a sync request.");
 
