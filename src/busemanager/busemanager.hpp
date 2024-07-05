@@ -17,11 +17,13 @@ class BuseManager {
    public:
     BuseManager(int bufferSize = 1048576);
     void runPeriodicSync();
-    void addWriteOp(uint64_t offset, uint32_t len);
+    void addWriteOperation(uint64_t startOffset, uint64_t endOffset);
+    std::pair<uint64_t, uint64_t> findNextDifference(uint64_t startOffset);
     void stopSyncThread();
 
     static void* buffer;
     static void* remoteBuffer;
+    static std::mutex writeMutex;
 
    private:
     std::vector<WriteOp> writeOps;

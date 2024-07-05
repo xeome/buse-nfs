@@ -1,12 +1,15 @@
 #include <unistd.h>
+#include <cstdlib>
 #include <thread>
 #include <cstring>  // For memcpy and memcmp
-#include "pch.h"    // Include the precompiled header
+#include "busemanager.hpp"
+#include "pch.h"  // Include the precompiled header
 
 BuseManager buseManager;
 
 void* BuseManager::buffer = nullptr;
 void* BuseManager::remoteBuffer = nullptr;
+std::mutex BuseManager::writeMutex;
 
 std::thread syncThread;
 
@@ -19,10 +22,11 @@ static int xmp_read(void* buf, uint32_t len, uint64_t offset, void* verbose) {
 }
 
 static int xmp_write(const void* buf, uint32_t len, uint64_t offset, void* verbose) {
+    std::lock_guard<std::mutex> lock(BuseManager::writeMutex);
+
     if (*(int*)verbose)
         LOG_F(INFO, "W - %lu, %u", offset, len);
     memcpy(static_cast<char*>(BuseManager::buffer) + offset, buf, len);
-    buseManager.addWriteOp(offset, len);
     return 0;
 }
 
@@ -61,7 +65,7 @@ int main(int argc, char* argv[]) {
     options.add_options()
         ("d,dev", "NBD Device path", cxxopts::value<std::string>()->default_value("/dev/nbd0"))
         ("s,size", "Block device size in bytes", cxxopts::value<int>()->default_value("1048576"))
-        ("v,verbose", "Enable verbose output", cxxopts::value<int>()->default_value("1"))
+        ("v,verbose", "Enable verbose output", cxxopts::value<int>()->default_value("0"))
         ("h,help", "Print usage")
     ;
     // clang-format on
@@ -73,10 +77,13 @@ int main(int argc, char* argv[]) {
 
     loguru::init(argc, argv);
     LOG_F(INFO, "Starting buse_nfs");
-    LOG_F(INFO, "Creating block device at %s with size %d bytes", result["dev"].as<std::string>().c_str(), result["size"].as<int>());
+    LOG_F(INFO, "Creating block device at %s with size %d bytes", result["dev"].as<std::string>().c_str(),
+          result["size"].as<int>());
 
-    BuseManager::buffer = malloc(result["size"].as<int>());
-    BuseManager::remoteBuffer = malloc(result["size"].as<int>());
+    // BuseManager::buffer = malloc(result["size"].as<int>());
+    // BuseManager::remoteBuffer = malloc(result["size"].as<int>());
+    BuseManager::buffer = calloc(1, result["size"].as<int>());
+    BuseManager::remoteBuffer = calloc(1, result["size"].as<int>());
 
     if (BuseManager::buffer == nullptr || BuseManager::remoteBuffer == nullptr) {
         LOG_F(ERROR, "Failed to allocate memory for buffer");
@@ -93,7 +100,7 @@ int main(int argc, char* argv[]) {
         xmp_init,                                          // init
         static_cast<u_int64_t>(result["size"].as<int>()),  // size
         512,                                               // blksize
-        0                                                  // size_blocks
+        4096                                               // size_blocks
     };
 
     std::thread buseThread([&]() {
