@@ -13,10 +13,15 @@ std::mutex BuseManager::writeMutex;
 
 std::thread syncThread;
 
-// Static buse functions that interact with BuseManager
 static int xmp_read(void* buf, uint32_t len, uint64_t offset, void* verbose) {
     if (*(int*)verbose)
         LOG_F(INFO, "R - %lu, %u", offset, len);
+
+    if (__builtin_expect((offset + len > buseManager.getBufferSize()), 0)) {
+        LOG_F(ERROR, "Read request out of bounds - %lu, %u", offset, len);
+        return 0;
+    }
+
     memcpy(buf, static_cast<char*>(BuseManager::buffer) + offset, len);
     return 0;
 }
@@ -26,6 +31,12 @@ static int xmp_write(const void* buf, uint32_t len, uint64_t offset, void* verbo
 
     if (*(int*)verbose)
         LOG_F(INFO, "W - %lu, %u", offset, len);
+
+    if (__builtin_expect((offset + len > buseManager.getBufferSize()), 0)) {
+        LOG_F(ERROR, "Write request out of bounds - %lu, %u", offset, len);
+        return 0;
+    }
+
     memcpy(static_cast<char*>(BuseManager::buffer) + offset, buf, len);
     return 0;
 }
@@ -65,7 +76,7 @@ int main(int argc, char* argv[]) {
     options.add_options()
         ("d,dev", "NBD Device path", cxxopts::value<std::string>()->default_value("/dev/nbd0"))
         ("s,size", "Block device size in bytes", cxxopts::value<int>()->default_value("1048576"))
-        ("v,verbose", "Enable verbose output", cxxopts::value<int>()->default_value("0"))
+        ("v,verbose", "Enable verbose output", cxxopts::value<int>()->default_value("1"))
         ("h,help", "Print usage")
     ;
     // clang-format on
@@ -77,11 +88,8 @@ int main(int argc, char* argv[]) {
 
     loguru::init(argc, argv);
     LOG_F(INFO, "Starting buse_nfs");
-    LOG_F(INFO, "Creating block device at %s with size %d bytes", result["dev"].as<std::string>().c_str(),
-          result["size"].as<int>());
+    LOG_F(INFO, "Creating block device at %s with size %d bytes", result["dev"].as<std::string>().c_str(), result["size"].as<int>());
 
-    // BuseManager::buffer = malloc(result["size"].as<int>());
-    // BuseManager::remoteBuffer = malloc(result["size"].as<int>());
     BuseManager::buffer = calloc(1, result["size"].as<int>());
     BuseManager::remoteBuffer = calloc(1, result["size"].as<int>());
 
@@ -100,7 +108,7 @@ int main(int argc, char* argv[]) {
         xmp_init,                                          // init
         static_cast<u_int64_t>(result["size"].as<int>()),  // size
         512,                                               // blksize
-        4096                                               // size_blocks
+        0  // size_blocks, setting other than 0 causes out of bound reads and writes for some reason
     };
 
     std::thread buseThread([&]() {

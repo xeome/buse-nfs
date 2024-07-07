@@ -20,6 +20,7 @@ class BuseManager {
     void addWriteOperation(uint64_t startOffset, uint64_t endOffset);
     std::pair<uint64_t, uint64_t> findNextDifference(uint64_t startOffset);
     void stopSyncThread();
+    uint64_t getBufferSize() { return BUFFER_SIZE; }
 
     static void* buffer;
     static void* remoteBuffer;

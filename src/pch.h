@@ -13,7 +13,7 @@ static int init_options(const int argc, char** argv, cxxopts::Options& options, 
 
     if (result.count("help")) {
         std::cout << options.help() << std::endl;
-        exit(0);
+        return 1;
     }
 
     // if (result.arguments().empty()) {
