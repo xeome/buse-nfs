@@ -7,27 +7,28 @@
 
 constexpr uint64_t MAX_WRITE_LENGTH = 4096;
 
-BuseManager::BuseManager(int bufferSize) : shouldStopSyncThread(false), BUFFER_SIZE(bufferSize) {
+BuseManager::BuseManager(int bufferSize) : isRunning(true), BUFFER_SIZE(bufferSize) {
     buffer = malloc(bufferSize);
     remoteBuffer = malloc(bufferSize);
 }
 
 void BuseManager::runPeriodicSync() {
     std::unique_lock<std::mutex> lock(lockMutex);
-    while (!shouldStopSyncThread.load()) {
-        if (syncCondVar.wait_for(lock, std::chrono::seconds(SYNC_INTERVAL)) == std::cv_status::timeout) {
+    while (isRunning.load()) {
+        if (intervalCV.wait_for(lock, std::chrono::seconds(SYNC_INTERVAL)) == std::cv_status::timeout && hasWrites.load()) {
             synchronizeData();
+            hasWrites.store(false);
         }
     }
-    // Perform final sync before exit
     LOG_F(INFO, "Performing final sync before exit");
     synchronizeData();
     LOG_F(INFO, "Exiting sync thread");
 }
 
 void BuseManager::stopSyncThread() {
-    shouldStopSyncThread.store(true);
-    syncCondVar.notify_all();
+    isRunning.store(false);
+    intervalCV.notify_all();
+    hasWrites.store(true);  // Ensure that the final sync is performed
 }
 
 void BuseManager::addWriteOperation(uint64_t startOffset, uint64_t endOffset) {

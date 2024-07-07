@@ -21,6 +21,7 @@ class BuseManager {
     std::pair<uint64_t, uint64_t> findNextDifference(uint64_t startOffset);
     void stopSyncThread();
     uint64_t getBufferSize() { return BUFFER_SIZE; }
+    std::atomic<bool>& getHasWrites() { return hasWrites; }
 
     static void* buffer;
     static void* remoteBuffer;
@@ -28,9 +29,10 @@ class BuseManager {
 
    private:
     std::vector<WriteOp> writeOps;
-    std::atomic<bool> shouldStopSyncThread;
+    std::atomic<bool> isRunning;
+    std::atomic<bool> hasWrites;
     std::mutex lockMutex;
-    std::condition_variable syncCondVar;
+    std::condition_variable intervalCV;
     const uint64_t SYNC_INTERVAL = 5;
     const uint64_t BUFFER_SIZE;
 

@@ -38,6 +38,11 @@ static int xmp_write(const void* buf, uint32_t len, uint64_t offset, void* verbo
     }
 
     memcpy(static_cast<char*>(BuseManager::buffer) + offset, buf, len);
+
+    if (__builtin_expect(buseManager.getHasWrites().load() == false, 1)) {
+        buseManager.getHasWrites().store(true);
+    }
+
     return 0;
 }
 
@@ -64,6 +69,7 @@ static int xmp_init(void* verbose) {
         LOG_F(INFO, "Init");
 
     syncThread = std::thread(&BuseManager::runPeriodicSync, &buseManager);
+    buseManager.getHasWrites().store(false);
 
     return 0;
 }
