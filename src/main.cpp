@@ -103,6 +103,7 @@ int main(int argc, char* argv[]) {
         LOG_F(ERROR, "Failed to allocate memory for buffer");
         return 1;
     }
+    buseManager.setBufferSize(result["size"].as<int>());
 
     // Start buse
     struct buse_operations aop = {

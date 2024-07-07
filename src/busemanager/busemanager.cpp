@@ -2,15 +2,21 @@
 #include <sys/types.h>
 #include <algorithm>
 #include <cstdint>
+#include <cstdlib>
 #include <cstring>
 #include <loguru.hpp>
 
 constexpr uint64_t MAX_WRITE_LENGTH = 4096;
 
-BuseManager::BuseManager(int bufferSize) : isRunning(true), BUFFER_SIZE(bufferSize) {
-    buffer = malloc(bufferSize);
-    remoteBuffer = malloc(bufferSize);
-}
+// BuseManager::BuseManager(int bufferSize) : isRunning(true), BUFFER_SIZE(bufferSize) {
+//     buffer = calloc(1, BUFFER_SIZE);
+//     remoteBuffer = calloc(1, BUFFER_SIZE);
+//     if (buffer == nullptr || remoteBuffer == nullptr) {
+//         LOG_F(ERROR, "Failed to allocate memory for buffer");
+//         exit(1);
+//     }
+//     LOG_F(INFO, "Buffer allocated with size %lu", BUFFER_SIZE);
+// }
 
 void BuseManager::runPeriodicSync() {
     std::unique_lock<std::mutex> lock(lockMutex);
