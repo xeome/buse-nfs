@@ -6,29 +6,38 @@
 #include <cstring>
 #include <loguru.hpp>
 
-constexpr uint64_t MAX_WRITE_LENGTH = 4096;
+std::unique_ptr<char[]> BuseManager::buffer;
+std::unique_ptr<char[]> BuseManager::remoteBuffer;
+std::mutex BuseManager::writeMutex;
 
-// BuseManager::BuseManager(int bufferSize) : isRunning(true), BUFFER_SIZE(bufferSize) {
-//     buffer = calloc(1, BUFFER_SIZE);
-//     remoteBuffer = calloc(1, BUFFER_SIZE);
-//     if (buffer == nullptr || remoteBuffer == nullptr) {
-//         LOG_F(ERROR, "Failed to allocate memory for buffer");
-//         exit(1);
-//     }
-//     LOG_F(INFO, "Buffer allocated with size %lu", BUFFER_SIZE);
-// }
+BuseManager::BuseManager(uint64_t bufferSize) : BUFFER_SIZE(bufferSize) {
+    buffer = std::make_unique<char[]>(BUFFER_SIZE);
+    remoteBuffer = std::make_unique<char[]>(BUFFER_SIZE);
+
+    if (!buffer || !remoteBuffer) {
+        LOG_F(ERROR, "Failed to allocate buffer");
+        exit(1);
+    }
+    LOG_F(INFO, "Buffer allocated with size %lu", BUFFER_SIZE);
+}
+
+BuseManager::~BuseManager() {
+    if (isRunning.load()) {
+        stopSyncThread();
+    }
+}
 
 void BuseManager::runPeriodicSync() {
     std::unique_lock<std::mutex> lock(lockMutex);
     while (isRunning.load()) {
         if (intervalCV.wait_for(lock, std::chrono::seconds(SYNC_INTERVAL)) == std::cv_status::timeout && hasWrites.load()) {
+            LOG_F(INFO, "Syncing data");
             synchronizeData();
             hasWrites.store(false);
         }
     }
-    LOG_F(INFO, "Performing final sync before exit");
     synchronizeData();
-    LOG_F(INFO, "Exiting sync thread");
+    LOG_F(INFO, "Sync thread stopped");
 }
 
 void BuseManager::stopSyncThread() {
@@ -42,30 +51,29 @@ void BuseManager::addWriteOperation(uint64_t startOffset, uint64_t endOffset) {
     if (length > MAX_WRITE_LENGTH) {
         LOG_F(ERROR, "Length is too large. startOffset: %lu, endOffset: %lu", startOffset, endOffset);
         for (uint64_t offset = startOffset; offset < endOffset; offset += MAX_WRITE_LENGTH) {
-            writeOps.push_back({offset, static_cast<uint32_t>(std::min(MAX_WRITE_LENGTH, endOffset - offset + 1))});
+            writeOps.emplace_back(WriteOp{offset, static_cast<uint32_t>(std::min(MAX_WRITE_LENGTH, endOffset - offset + 1))});
         }
     } else {
-        writeOps.push_back({startOffset, static_cast<uint32_t>(length)});
+        writeOps.emplace_back(WriteOp{startOffset, static_cast<uint32_t>(length)});
     }
 }
 
 std::pair<uint64_t, uint64_t> BuseManager::findNextDifference(uint64_t startOffset) {
-    auto firstDiff = std::mismatch(static_cast<char*>(buffer) + startOffset, static_cast<char*>(buffer) + BUFFER_SIZE,
-                                   static_cast<char*>(remoteBuffer) + startOffset);
-    if (firstDiff.first == static_cast<char*>(buffer) + BUFFER_SIZE) {
+    auto firstDiff = std::mismatch(buffer.get() + startOffset, buffer.get() + BUFFER_SIZE, remoteBuffer.get() + startOffset);
+    if (firstDiff.first == buffer.get() + BUFFER_SIZE) {
         return {BUFFER_SIZE, BUFFER_SIZE};  // Indicate no more differences
     }
 
-    uint64_t diffStart = firstDiff.first - static_cast<char*>(buffer);
+    uint64_t diffStart = firstDiff.first - buffer.get();
     uint64_t diffEnd = diffStart;
     for (uint64_t i = diffStart; i < BUFFER_SIZE && i - diffStart < MAX_WRITE_LENGTH; i++) {
-        if (static_cast<char*>(buffer)[i] != static_cast<char*>(remoteBuffer)[i]) {
+        if (buffer[i] != remoteBuffer[i]) {
             diffEnd = i;
         }
     }
 
     if (diffEnd - diffStart >= MAX_WRITE_LENGTH) {
-        LOG_F(ERROR, "Difference is too large. diffStart: %lu, diffEnd: %lu", diffStart, diffEnd);
+        LOG_F(ERROR, "Difference too large - %lu, %lu", diffStart, diffEnd);
     }
 
     return {diffStart, diffEnd};
@@ -84,18 +92,16 @@ void BuseManager::consolidateWriteOperations() {
 }
 
 void BuseManager::synchronizeData() {
+    std::lock_guard<std::mutex> lock(writeMutex);
     consolidateWriteOperations();
 
-    std::lock_guard<std::mutex> lock(writeMutex);
     for (const auto& op : writeOps) {
-        memcpy(static_cast<char*>(remoteBuffer) + op.offset, static_cast<char*>(buffer) + op.offset, op.len);
+        std::memcpy(remoteBuffer.get() + op.offset, buffer.get() + op.offset, op.len);
         // LOG_F(INFO, "Synced %lu, %u", op.offset, op.len);
     }
     writeOps.clear();
 
-    if (memcmp(buffer, remoteBuffer, BUFFER_SIZE) != 0) {
-        LOG_F(ERROR, "Data and remote_data are not in sync");
+    if (memcmp(buffer.get(), remoteBuffer.get(), BUFFER_SIZE) != 0) {
+        LOG_F(ERROR, "buffer and remoteBuffer are not in sync");
     }
-
-    LOG_F(INFO, "Data synchronized");
 }

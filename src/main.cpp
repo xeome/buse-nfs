@@ -4,25 +4,21 @@
 #include <cstring>  // For memcpy and memcmp
 #include "busemanager.hpp"
 #include "pch.h"  // Include the precompiled header
+#include <cxxopts.hpp>
 
-BuseManager buseManager;
-
-void* BuseManager::buffer = nullptr;
-void* BuseManager::remoteBuffer = nullptr;
-std::mutex BuseManager::writeMutex;
-
+std::unique_ptr<BuseManager> buseManager;
 std::thread syncThread;
 
 static int xmp_read(void* buf, uint32_t len, uint64_t offset, void* verbose) {
     if (*(int*)verbose)
         LOG_F(INFO, "R - %lu, %u", offset, len);
 
-    if (__builtin_expect((offset + len > buseManager.getBufferSize()), 0)) {
+    if (__builtin_expect((offset + len > buseManager->getBufferSize()), 0)) {
         LOG_F(ERROR, "Read request out of bounds - %lu, %u", offset, len);
         return 0;
     }
 
-    memcpy(buf, static_cast<char*>(BuseManager::buffer) + offset, len);
+    std::memcpy(buf, BuseManager::buffer.get() + offset, len);
     return 0;
 }
 
@@ -32,15 +28,15 @@ static int xmp_write(const void* buf, uint32_t len, uint64_t offset, void* verbo
     if (*(int*)verbose)
         LOG_F(INFO, "W - %lu, %u", offset, len);
 
-    if (__builtin_expect((offset + len > buseManager.getBufferSize()), 0)) {
+    if (__builtin_expect((offset + len > buseManager->getBufferSize()), 0)) {
         LOG_F(ERROR, "Write request out of bounds - %lu, %u", offset, len);
         return 0;
     }
 
-    memcpy(static_cast<char*>(BuseManager::buffer) + offset, buf, len);
+    std::memcpy(BuseManager::buffer.get() + offset, buf, len);
 
-    if (__builtin_expect(buseManager.getHasWrites().load() == false, 1)) {
-        buseManager.getHasWrites().store(true);
+    if (buseManager->getHasWrites().load() == false) {
+        buseManager->getHasWrites().store(true);
     }
 
     return 0;
@@ -49,7 +45,7 @@ static int xmp_write(const void* buf, uint32_t len, uint64_t offset, void* verbo
 static void xmp_disc(void* verbose) {
     if (*(int*)verbose)
         LOG_F(INFO, "Disconnect request received");
-    buseManager.stopSyncThread();
+    buseManager->stopSyncThread();
 }
 
 static int xmp_flush(void* verbose) {
@@ -68,8 +64,8 @@ static int xmp_init(void* verbose) {
     if (*(int*)verbose)
         LOG_F(INFO, "Init");
 
-    syncThread = std::thread(&BuseManager::runPeriodicSync, &buseManager);
-    buseManager.getHasWrites().store(false);
+    syncThread = std::thread(&BuseManager::runPeriodicSync, buseManager.get());
+    buseManager->getHasWrites().store(false);
 
     return 0;
 }
@@ -96,14 +92,7 @@ int main(int argc, char* argv[]) {
     LOG_F(INFO, "Starting buse_nfs");
     LOG_F(INFO, "Creating block device at %s with size %d bytes", result["dev"].as<std::string>().c_str(), result["size"].as<int>());
 
-    BuseManager::buffer = calloc(1, result["size"].as<int>());
-    BuseManager::remoteBuffer = calloc(1, result["size"].as<int>());
-
-    if (BuseManager::buffer == nullptr || BuseManager::remoteBuffer == nullptr) {
-        LOG_F(ERROR, "Failed to allocate memory for buffer");
-        return 1;
-    }
-    buseManager.setBufferSize(result["size"].as<int>());
+    buseManager = std::make_unique<BuseManager>(result["size"].as<int>());
 
     // Start buse
     struct buse_operations aop = {
@@ -123,7 +112,7 @@ int main(int argc, char* argv[]) {
             LOG_F(ERROR, "Failed to create block device");
 
             // Stop the sync thread
-            buseManager.stopSyncThread();
+            buseManager->stopSyncThread();
         }
         LOG_F(INFO, "Exiting buse thread");
     });
@@ -137,8 +126,6 @@ int main(int argc, char* argv[]) {
     }
 
     LOG_F(INFO, "Exiting buse_nfs");
-    free(BuseManager::buffer);
-    free(BuseManager::remoteBuffer);
 
     return 0;
 }

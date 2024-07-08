@@ -7,7 +7,8 @@
 #include <mutex>
 #include <vector>
 
-// Forward declaration for WriteOp structure
+constexpr uint64_t MAX_WRITE_LENGTH = 4096;
+
 struct WriteOp {
     uint64_t offset;
     uint32_t len;
@@ -15,23 +16,24 @@ struct WriteOp {
 
 class BuseManager {
    public:
-    // BuseManager(int bufferSize = 0);
+    BuseManager(uint64_t bufferSize = 0);
+    ~BuseManager();
+
     void runPeriodicSync();
     void addWriteOperation(uint64_t startOffset, uint64_t endOffset);
     std::pair<uint64_t, uint64_t> findNextDifference(uint64_t startOffset);
     void stopSyncThread();
-    uint64_t getBufferSize() { return BUFFER_SIZE; }
+    uint64_t getBufferSize() const { return BUFFER_SIZE; }
     std::atomic<bool>& getHasWrites() { return hasWrites; }
-    void setBufferSize(const uint64_t bufferSize) { BUFFER_SIZE = bufferSize; };
 
-    static void* buffer;
-    static void* remoteBuffer;
+    static std::unique_ptr<char[]> buffer;
+    static std::unique_ptr<char[]> remoteBuffer;
     static std::mutex writeMutex;
 
    private:
     std::vector<WriteOp> writeOps;
-    std::atomic<bool> isRunning;
-    std::atomic<bool> hasWrites;
+    std::atomic<bool> isRunning{true};
+    std::atomic<bool> hasWrites{false};
     std::mutex lockMutex;
     std::condition_variable intervalCV;
     const uint64_t SYNC_INTERVAL = 5;
