@@ -16,7 +16,7 @@ struct WriteOp {
 
 class BuseManager {
    public:
-    BuseManager(uint64_t bufferSize = 0);
+    explicit BuseManager(uint64_t bufferSize = 0);
     ~BuseManager();
 
     void runPeriodicSync();
@@ -25,6 +25,7 @@ class BuseManager {
     void stopSyncThread();
     uint64_t getBufferSize() const { return BUFFER_SIZE; }
     std::atomic<bool>& getHasWrites() { return hasWrites; }
+    void synchronizeData();
 
     static std::unique_ptr<char[]> buffer;
     static std::unique_ptr<char[]> remoteBuffer;
@@ -40,7 +41,6 @@ class BuseManager {
     uint64_t BUFFER_SIZE;
 
     void consolidateWriteOperations();
-    void synchronizeData();
 };
 
 #endif  // BUSE_MANAGER_H

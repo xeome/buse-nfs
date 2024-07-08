@@ -60,6 +60,8 @@ while true; do
         cleanup
     fi
 
+    echo -e "Block $number: ${GREEN}OK${NC}"
+
     end_time=$(date +%s%3N)
     duration=$((end_time - start_time))
 
