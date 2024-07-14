@@ -1,10 +1,11 @@
-#include "busemanager.hpp"
 #include <sys/types.h>
 #include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
 #include <loguru.hpp>
+
+#include "busemanager.hpp"
 
 std::unique_ptr<char[]> BuseManager::buffer;
 std::unique_ptr<char[]> BuseManager::remoteBuffer;

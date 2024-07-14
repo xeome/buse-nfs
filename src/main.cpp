@@ -2,7 +2,7 @@
 #include <cstdlib>
 #include <thread>
 #include <cstring>  // For memcpy and memcmp
-#include "busemanager.hpp"
+
 #include "pch.h"  // Include the precompiled header
 #include <cxxopts.hpp>
 
@@ -91,8 +91,7 @@ int main(int argc, char* argv[]) {
 
     loguru::init(argc, argv);
     LOG_F(INFO, "Starting buse_nfs");
-    LOG_F(INFO, "Creating block device at %s with size %d bytes", result["dev"].as<std::string>().c_str(),
-          result["size"].as<int>());
+    LOG_F(INFO, "Creating block device at %s with size %d bytes", result["dev"].as<std::string>().c_str(), result["size"].as<int>());
 
     buseManager = std::make_unique<BuseManager>(result["size"].as<int>());
 
