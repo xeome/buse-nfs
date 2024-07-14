@@ -28,26 +28,6 @@ class BuseManager {
     void runPeriodicSync();
 
     /**
-     * @brief Adds a write operation to the queue.
-     * @param startOffset The starting offset of the write operation.
-     * @param endOffset The ending offset of the write operation.
-     *
-     * This method adds a write operation defined by its start and end offsets to the queue of operations
-     * to be processed during synchronization.
-     */
-    void addWriteOperation(uint64_t startOffset, uint64_t endOffset);
-
-    /**
-     * @brief Finds the next difference between local and remote buffers starting from a given offset.
-     * @param startOffset The offset from which to start searching for differences.
-     * @return A pair of offsets indicating the start and end of the next difference.
-     *
-     * This method scans the buffers starting from the specified offset to find the next range where the local
-     * and remote buffers differ. It returns a pair of offsets indicating the start and end of this range.
-     */
-    std::pair<uint64_t, uint64_t> findNextDifference(uint64_t startOffset);
-
-    /**
      * @brief Stops the synchronization thread.
      *
      * This method stops the synchronization thread if it is running, ensuring that no further synchronization
@@ -95,6 +75,26 @@ class BuseManager {
      * the synchronization process.
      */
     void consolidateWriteOperations();
+
+    /**
+     * @brief Adds a write operation to the queue.
+     * @param startOffset The starting offset of the write operation.
+     * @param endOffset The ending offset of the write operation.
+     *
+     * This method adds a write operation defined by its start and end offsets to the queue of operations
+     * to be processed during synchronization.
+     */
+    void addWriteOperation(uint64_t startOffset, uint64_t endOffset);
+
+    /**
+     * @brief Finds the next difference between local and remote buffers starting from a given offset.
+     * @param startOffset The offset from which to start searching for differences.
+     * @return A pair of offsets indicating the start and end of the next difference.
+     *
+     * This method scans the buffers starting from the specified offset to find the next range where the local
+     * and remote buffers differ. It returns a pair of offsets indicating the start and end of this range.
+     */
+    std::pair<uint64_t, uint64_t> findNextDifference(uint64_t startOffset);
 };
 
 #endif  // BUSE_MANAGER_H

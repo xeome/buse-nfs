@@ -12,12 +12,12 @@ std::unique_ptr<char[]> BuseManager::remoteBuffer;
 std::mutex BuseManager::writeMutex;
 
 BuseManager::BuseManager(uint64_t bufferSize) : BUFFER_SIZE(bufferSize) {
-    buffer = std::make_unique<char[]>(BUFFER_SIZE);
-    remoteBuffer = std::make_unique<char[]>(BUFFER_SIZE);
-
-    if (!buffer || !remoteBuffer) {
-        LOG_F(ERROR, "Failed to allocate buffer");
-        exit(1);
+    try {
+        buffer = std::make_unique<char[]>(BUFFER_SIZE);
+        remoteBuffer = std::make_unique<char[]>(BUFFER_SIZE);
+    } catch (const std::bad_alloc& e) {
+        LOG_F(ERROR, "Failed to allocate buffer: %s", e.what());
+        throw;
     }
     LOG_F(INFO, "Buffer allocated with size %lu", BUFFER_SIZE);
 }
